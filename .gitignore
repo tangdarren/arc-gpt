@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Model checkpoints and training artifacts
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+runs/
+logs/
+wandb/
+outputs/
+artifacts/
+data/processed/
+*.npy
+*.npz
