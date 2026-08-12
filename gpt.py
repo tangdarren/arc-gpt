@@ -136,3 +136,28 @@ ffwd = FeedForward(32)
 print(out.shape)
 out = ffwd(out)
 print(out.shape)
+
+class Block(nn.Module):
+
+    def __init__(self, n_embd, n_head):
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa = MultiHeadAttention(n_head, head_size)
+        self.ffwd = FeedForward(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa(x)
+        x = x + self.ffwd(x)
+        return x
+
+n_embd = 32
+n_head = 4
+head_size = n_embd // n_head
+x = torch.randn(4, 8, 32)
+print(x.shape)
+print(n_embd)
+print(n_head)
+print(head_size)
+block = Block(n_embd, n_head)
+out = block(x)
+print(out.shape)
