@@ -4,9 +4,9 @@ import torch
 with open('input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
-print("length of dataset in characters: ", len(text))
+print("length of dataset in characters: ", len(text)) #length of dataset in characters:  1115394
 
-# let's look at the first 1000 characters
+# print first 1000 characters
 print(text[:1000])
 
 # here are all the unique characters that occur in this text
@@ -24,13 +24,44 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 print(encode("hii there"))
 print(decode(encode("hii there")))
 
-# let's now encode the entire text dataset and store it into a torch.Tensor
+# encode the entire text dataset and store it into a torch.Tensor
 data = torch.tensor(encode(text), dtype=torch.long)
 print(data.shape, data.dtype)
-print(data[:1000]) # the 1000 characters we looked at earlier will look like this to the GPT
+print(data[:1000])
 
-# Let's now split up the data into train and validation sets
+# split up the data into train and validation sets
 n = int(0.9*len(data)) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
 print(len(train_data), len(val_data))
+
+batch_size = 4
+block_size = 8
+
+x = train_data[:block_size]
+y = train_data[1:block_size+1]
+print(x)
+print(y)
+for t in range(block_size):
+    context = x[:t+1]
+    target = y[t]
+    print(f"when input is {context} the target: {target}")
+
+def get_batch(split):
+    data = train_data if split == 'train' else val_data
+    ix = torch.randint(len(data) - block_size, (batch_size,))
+    x = torch.stack([data[i:i+block_size] for i in ix])
+    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+    return x, y
+
+xb, yb = get_batch('train')
+print(xb)
+print(yb)
+print(xb.shape)
+print(yb.shape)
+
+for b in range(batch_size):
+    for t in range(block_size):
+        context = xb[b, :t+1]
+        target = yb[b, t]
+        print(f"when input is {context.tolist()} the target: {target}")
