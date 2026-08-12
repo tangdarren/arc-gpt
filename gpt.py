@@ -144,11 +144,21 @@ class Block(nn.Module):
         head_size = n_embd // n_head
         self.sa = MultiHeadAttention(n_head, head_size)
         self.ffwd = FeedForward(n_embd)
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self, x):
-        x = x + self.sa(x)
-        x = x + self.ffwd(x)
+        x = x + self.sa(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
         return x
+
+x = torch.randn(2, 8, 32)
+ln = nn.LayerNorm(32)
+print(x.shape)
+out = ln(x)
+print(out.shape)
+print(out[0, 0].mean())
+print(out[0, 0].std())
 
 n_embd = 32
 n_head = 4
