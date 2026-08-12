@@ -102,3 +102,17 @@ print(logits.shape)
 print(loss)
 
 print(decode(m.generate(idx=torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
+
+optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
+
+for steps in range(10000):
+    xb, yb = get_batch('train')
+    logits, loss = m(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+    if steps % 1000 == 0:
+        print(steps, loss.item())
+
+print(loss.item())
+print(decode(m.generate(idx=torch.zeros((1, 1), dtype=torch.long), max_new_tokens=300)[0].tolist()))
