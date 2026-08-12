@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 with open('input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
@@ -51,3 +52,27 @@ wei = torch.zeros((T, T))
 wei = wei.masked_fill(tril == 0, float('-inf'))
 wei = torch.softmax(wei, dim=-1)
 print(wei)
+
+B, T, C = 4, 8, 32
+x = torch.randn(B, T, C)
+
+head_size = 16
+key = nn.Linear(C, head_size, bias=False)
+query = nn.Linear(C, head_size, bias=False)
+value = nn.Linear(C, head_size, bias=False)
+k = key(x)
+q = query(x)
+print(k.shape)
+print(q.shape)
+
+wei = q @ k.transpose(-2, -1)
+tril = torch.tril(torch.ones(T, T))
+wei = wei.masked_fill(tril == 0, float('-inf'))
+wei = torch.softmax(wei, dim=-1)
+print(wei.shape)
+print(wei[0])
+
+v = value(x)
+out = wei @ v
+print(v.shape)
+print(out.shape)
