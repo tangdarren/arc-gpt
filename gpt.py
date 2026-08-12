@@ -76,3 +76,46 @@ v = value(x)
 out = wei @ v
 print(v.shape)
 print(out.shape)
+
+class Head(nn.Module):
+
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(C, head_size, bias=False)
+        self.query = nn.Linear(C, head_size, bias=False)
+        self.value = nn.Linear(C, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+    def forward(self, x):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        wei = q @ k.transpose(-2, -1) * k.shape[-1]**-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = torch.softmax(wei, dim=-1)
+        v = self.value(x)
+        out = wei @ v
+        return out
+
+head_size = 8
+h = Head(head_size)
+out = h(x)
+print(out.shape)
+
+class MultiHeadAttention(nn.Module):
+
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+
+    def forward(self, x):
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        return out
+
+num_heads = 4
+head_size = 8
+mha = MultiHeadAttention(num_heads, head_size)
+out = mha(x)
+print(num_heads)
+print(head_size)
+print(out.shape)
