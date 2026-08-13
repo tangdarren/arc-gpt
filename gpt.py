@@ -1,5 +1,13 @@
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+
+batch_size = 64
+block_size = 256
+n_embd = 384
+n_head = 6
+n_layer = 6
+dropout = 0.2
 
 with open('input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
@@ -16,9 +24,6 @@ n = int(0.9*len(data))
 train_data = data[:n]
 val_data = data[n:]
 
-batch_size = 4
-block_size = 8
-
 def get_batch(split):
     data = train_data if split == 'train' else val_data
     ix = torch.randint(len(data) - block_size, (batch_size,))
@@ -26,65 +31,15 @@ def get_batch(split):
     y = torch.stack([data[i+1:i+block_size+1] for i in ix])
     return x, y
 
-xb, yb = get_batch('train')
-
-B, T, C = 4, 8, 2
-x = torch.randn(B, T, C)
-print(x)
-
-xbow = torch.zeros((B, T, C))
-for b in range(B):
-    for t in range(T):
-        xprev = x[b, :t+1]
-        xbow[b, t] = torch.mean(xprev, 0)
-print(xbow)
-
-wei = torch.tril(torch.ones(T, T))
-wei = wei / wei.sum(1, keepdim=True)
-print(wei)
-xbow2 = wei @ x
-print(xbow2)
-
-print(torch.allclose(xbow, xbow2))
-
-tril = torch.tril(torch.ones(T, T))
-wei = torch.zeros((T, T))
-wei = wei.masked_fill(tril == 0, float('-inf'))
-wei = torch.softmax(wei, dim=-1)
-print(wei)
-
-B, T, C = 4, 8, 32
-x = torch.randn(B, T, C)
-
-head_size = 16
-key = nn.Linear(C, head_size, bias=False)
-query = nn.Linear(C, head_size, bias=False)
-value = nn.Linear(C, head_size, bias=False)
-k = key(x)
-q = query(x)
-print(k.shape)
-print(q.shape)
-
-wei = q @ k.transpose(-2, -1)
-tril = torch.tril(torch.ones(T, T))
-wei = wei.masked_fill(tril == 0, float('-inf'))
-wei = torch.softmax(wei, dim=-1)
-print(wei.shape)
-print(wei[0])
-
-v = value(x)
-out = wei @ v
-print(v.shape)
-print(out.shape)
-
 class Head(nn.Module):
 
     def __init__(self, head_size):
         super().__init__()
-        self.key = nn.Linear(C, head_size, bias=False)
-        self.query = nn.Linear(C, head_size, bias=False)
-        self.value = nn.Linear(C, head_size, bias=False)
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         B, T, C = x.shape
@@ -92,50 +47,38 @@ class Head(nn.Module):
         q = self.query(x)
         wei = q @ k.transpose(-2, -1) * k.shape[-1]**-0.5
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
-        wei = torch.softmax(wei, dim=-1)
+        wei = F.softmax(wei, dim=-1)
+        wei = self.dropout(wei)
         v = self.value(x)
         out = wei @ v
         return out
-
-head_size = 8
-h = Head(head_size)
-out = h(x)
-print(out.shape)
 
 class MultiHeadAttention(nn.Module):
 
     def __init__(self, num_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(n_embd, n_embd)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
+        out = self.dropout(self.proj(out))
         return out
-
-num_heads = 4
-head_size = 8
-mha = MultiHeadAttention(num_heads, head_size)
-out = mha(x)
-print(num_heads)
-print(head_size)
-print(out.shape)
 
 class FeedForward(nn.Module):
 
     def __init__(self, n_embd):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embd, n_embd),
+            nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
+            nn.Linear(4 * n_embd, n_embd),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
         return self.net(x)
-
-ffwd = FeedForward(32)
-print(out.shape)
-out = ffwd(out)
-print(out.shape)
 
 class Block(nn.Module):
 
@@ -152,22 +95,50 @@ class Block(nn.Module):
         x = x + self.ffwd(self.ln2(x))
         return x
 
-x = torch.randn(2, 8, 32)
-ln = nn.LayerNorm(32)
-print(x.shape)
-out = ln(x)
-print(out.shape)
-print(out[0, 0].mean())
-print(out[0, 0].std())
+class GPTLanguageModel(nn.Module):
 
-n_embd = 32
-n_head = 4
-head_size = n_embd // n_head
-x = torch.randn(4, 8, 32)
-print(x.shape)
-print(n_embd)
-print(n_head)
-print(head_size)
-block = Block(n_embd, n_head)
-out = block(x)
-print(out.shape)
+    def __init__(self):
+        super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
+        self.ln_f = nn.LayerNorm(n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
+
+    def forward(self, idx, targets=None):
+        B, T = idx.shape
+        tok_emb = self.token_embedding_table(idx)
+        pos_emb = self.position_embedding_table(torch.arange(T))
+        x = tok_emb + pos_emb
+        x = self.blocks(x)
+        x = self.ln_f(x)
+        logits = self.lm_head(x)
+
+        if targets is None:
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+
+        return logits, loss
+
+    def generate(self, idx, max_new_tokens):
+        for _ in range(max_new_tokens):
+            idx_cond = idx[:, -block_size:]
+            logits, loss = self(idx_cond)
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, idx_next), dim=1)
+        return idx
+
+model = GPTLanguageModel()
+xb, yb = get_batch('train')
+logits, loss = model(xb, yb)
+print(logits.shape)
+print(loss)
+print(sum(p.numel() for p in model.parameters()))
+
+print(decode(model.generate(idx=torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
